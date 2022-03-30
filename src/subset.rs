@@ -130,6 +130,7 @@ fn subset_ttf(
     let fpgm = provider.table_data(tag::FPGM)?;
     let name = provider.table_data(tag::NAME)?;
     let prep = provider.table_data(tag::PREP)?;
+    let os_2 = provider.read_table_data(tag::OS_2)?;
 
     // Build the new font
     let mut builder = FontBuilder::new(0x00010000_u32);
@@ -146,6 +147,7 @@ fn subset_ttf(
     if let Some(name) = name {
         builder.add_table::<_, ReadScope<'_>>(tag::NAME, ReadScope::new(&name), ())?;
     }
+    builder.add_table::<_, ReadScope<'_>>(tag::OS_2, ReadScope::new(&os_2), ())?;
     builder.add_table::<_, PostTable<'_>>(tag::POST, &post, ())?;
     if let Some(prep) = prep {
         builder.add_table::<_, ReadScope<'_>>(tag::PREP, ReadScope::new(&prep), ())?;
@@ -208,6 +210,7 @@ fn subset_cff(
     let name = provider.table_data(tag::NAME)?;
     let prep = provider.table_data(tag::PREP)?;
     let os_2 = provider.read_table_data(tag::OS_2)?;
+    let vhea = provider.table_data(tag::VHEA)?;
 
     // Build the new font
     let mut builder = FontBuilder::new(tag::OTTO);
@@ -228,6 +231,9 @@ fn subset_cff(
     builder.add_table::<_, PostTable<'_>>(tag::POST, &post, ())?;
     if let Some(prep) = prep {
         builder.add_table::<_, ReadScope<'_>>(tag::PREP, ReadScope::new(&prep), ())?;
+    }
+    if let Some(vhea) = vhea {
+        builder.add_table::<_, ReadScope<'_>>(tag::VHEA, ReadScope::new(&vhea), ())?;
     }
 
     // Extract the new CFF table now that we're done with cff_subset
@@ -253,6 +259,7 @@ pub fn whole_font<F: FontTableProvider>(
 ) -> Result<Vec<u8>, ReadWriteError> {
     let head = ReadScope::new(&provider.read_table_data(tag::HEAD)?).read::<HeadTable>()?;
     let maxp = ReadScope::new(&provider.read_table_data(tag::MAXP)?).read::<MaxpTable>()?;
+    let os_2 = ReadScope::new(&provider.read_table_data(tag::OS_2)?).read::<MaxpTable>()?;
 
     let sfnt_version = tags
         .iter()
@@ -264,7 +271,7 @@ pub fn whole_font<F: FontTableProvider>(
     for &tag in tags {
         match tag {
             tag::GLYF => wants_glyf = true,
-            tag::HEAD | tag::MAXP | tag::LOCA => (),
+            tag::HEAD | tag::MAXP | tag::LOCA | tag::OS_2 => (),
             _ => {
                 builder.add_table::<_, ReadScope<'_>>(
                     tag,
@@ -276,6 +283,7 @@ pub fn whole_font<F: FontTableProvider>(
     }
     // maxp and head are required for the font to be usable, so they're always added.
     builder.add_table::<_, MaxpTable>(tag::MAXP, &maxp, ())?;
+    builder.add_table::<_, MaxpTable>(tag::OS_2, &os_2, ())?;
     let mut builder_with_head = builder.add_head_table(&head)?;
 
     // Add glyf and loca if requested, glyf implies loca. They may not be requested in the case of
